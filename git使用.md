@@ -14,6 +14,10 @@ git config --global --list 查看配置信息
 --system：所有用户生效
 包含空格时需要使用双引号
 ```
+## 设置命令别名
+```
+alias <commandAlias>=<command>
+```
 
 # 1.初始化仓库
 ## 当前目录初始化为仓库
