@@ -22,14 +22,14 @@ git init
 ```
 ## 在当前目录下创建并初始化仓库
 ```
-git init YourRepoName
+git init <YourRepoName>
 ```
 ## 在当前目录拉取并初始化仓库
 ```
-git clone YourRepoUrl
+git clone <YourRepoUrl>
 ```
 
-# 2.本地保存
+# 2.本地提交
 ```
 git add 工作区文件同步到暂存区
 git rm 删除工作区和暂存区的文件
@@ -63,4 +63,14 @@ git diff --cached 比对缓存区与当前版本库的差异
 git diff <CommitHash1> <CommitHash2> 比对两个版本的差异
 git diff <BranchName1> <BranchName2> 比对两个分支的差异
 git diff <CommitHash1> <CommitHash2> <FileName> 比对两个版本的文件
+```
+
+# 5.远程推送与拉取
+```
+git remote add <RepoAlias> <YourRepoUrl> 添加远程仓库地址
+git push -u <RepoAlias> <BranchName> 推送本地仓库修改到远程的同名分支
+git push -u <RepoAlias> <OriginName>:<LocalName> 推送本地仓库修改到远程仓库的指定分支
+git pull 拉取并合并远程仓库名为origin的main分支
+git pull -u <RepoAlias> <OriginName>:<LocalName> 拉取远程仓库的更新并合并指定分支
+git fetch <RepoAlias> 拉取远程仓库的更新
 ```
