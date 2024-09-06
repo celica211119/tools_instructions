@@ -87,5 +87,7 @@ git branch -D <BranchName> 删除本地分支
 git branch -rD <RepoAlias>/<BranchName> 删除远程分支
 ```
 ## rebsase和merge区别
-rebase：远程分支的所有提交记录完整添加到当前分支，合并后位置停留在远程分支的最后一次提交
-merge：忽略远程分支的所有提交信息，在本地分支生成一个新的提交
+### rebsase
+远程分支的所有提交记录完整添加到当前分支，合并后位置停留在远程分支的最后一次提交
+### merge区
+忽略远程分支的所有提交信息，在本地分支生成一个新的提交
