@@ -78,3 +78,14 @@ git pull 拉取并合并远程仓库名为origin的main分支
 git pull -u <RepoAlias> <OriginName>:<LocalName> 拉取远程仓库的更新并合并指定分支
 git fetch <RepoAlias> 拉取远程仓库的更新
 ```
+
+# 6.分支合并
+```
+git checkout <BranchName> 切换分支
+git rebase <RepoAlias>/<BranchName> <BranchName> 将远程分支合并到本地分支，远程分支的提交
+git branch -D <BranchName> 删除本地分支
+git branch -rD <RepoAlias>/<BranchName> 删除远程分支
+```
+## rebsase和merge区别
+rebase：远程分支的所有提交记录完整添加到当前分支，合并后位置停留在远程分支的最后一次提交
+merge：忽略远程分支的所有提交信息，在本地分支生成一个新的提交
