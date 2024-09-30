@@ -51,6 +51,7 @@ commit：仅提交暂存区，不检查工作区内容
 
 # 3.版本回滚
 ```
+git checkout -- . 将还未提交发更改回退
 git reset --soft <CommitHash> 回退至指定版本
 git reflog 查看版本历史
 
