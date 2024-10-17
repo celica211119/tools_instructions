@@ -339,7 +339,7 @@ KUBE_CONTROLLER_MANAGER_OPTS
 --service-account-private-key-file=/opt/kubernetes/ssl/ca-key.pem \\
 --cluster-signing-duration=87600h0m0s
 ```
-### 1.2.3 生成kubeconfig
+### 1.2.3 生成kube-controller-manager.kubeconfig
 ```
 # KUBE_CONFIG="/opt/kubernetes/cfg/kube-controller-manager.kubeconfig"
 # KUBE_APISERVER="ip:port"
@@ -434,7 +434,7 @@ KUBE_SCHEDULER_OPTS="--logtostderr=false \\
 --kubeconfig=/opt/kubernetes/cfg/kube-scheduler.kubeconfig \\
 --bind-address=127.0.0.1"
 ```
-### 1.3.3 生成kubeconfig
+### 1.3.3 生成kube-scheduler.kubeconfig
 ```
 # KUBE_CONFIG="/opt/kubernetes/cfg/kube-scheduler.kubeconfig"
 # KUBE_APISERVER="ip:port"
@@ -527,7 +527,7 @@ admin.csr  admin-csr.json  admin-key.pem  admin.pem
 ```
 # mkdir /root/.kube
 # KUBE_CONFIG="/root/.kube/config"
-# KUBE_APISERVER="https://192.168.176.140:6443"
+# KUBE_APISERVER="ip:port
 # kubectl config set-cluster kubernetes \
   --certificate-authority=/opt/kubernetes/ssl/ca.pem \
   --embed-certs=true \
@@ -553,7 +553,7 @@ admin.csr  admin-csr.json  admin-key.pem  admin.pem
 ```
 
 # 2 部署work节点
-## 2.1 部署kubelet
+## 2.1 master节点部署kubelet
 ### 2.1.1 配置kubelet
 ```
 # vi /opt/kubernetes/cfg/kubelet.conf
@@ -566,7 +566,259 @@ KUBELET_OPTS="--logtostderr=false \\
 --bootstrap-kubeconfig=/opt/kubernetes/cfg/bootstrap.kubeconfig \\
 --config=/opt/kubernetes/cfg/kubelet-config.yml \\
 --cert-dir=/opt/kubernetes/ssl \\
---pod-infra-container-image=registry.cn-hangzhou.aliyuncs.com/google-containers/pause-amd64:3.0"
+--pod-infra-container-image=registry.cn-hangzhou.aliyuncs.com/google-containers/pause-arm64:3.0"
 ```
+```
+KUBELET_OPTS
+--logtostderr=false \\
+--v=2 \\
+--log-dir=/opt/kubernetes/logs \\
+--hostname-override 显示名称，集群唯一(不可重复)，设置本Node的名称
+--network-plugin 启用CNI
+--kubeconfig 空路径，会自动生成，后面用于连接 apiserver。设置与 API Server 连接的相关配置，可以与 kube-controller-manager 使用的 kubeconfig 文件相同
+--bootstrap-kubeconfig 首次启动向apiserver申请证书
+--config 配置文件参数
+--cert-dir kubelet证书目录
+--pod-infra-container-image 管理Pod网络容器的镜像 init container
+```
+### 2.1.2 添加参数文件
+```
+# vi /opt/kubernetes/cfg/kubelet-config.yml
+kind: KubeletConfiguration
+apiVersion: kubelet.config.k8s.io/v1beta1
+address: 0.0.0.0
+port: 10250
+readOnlyPort: 10255
+cgroupDriver: cgroupfs
+clusterDNS:
+- 10.0.0.2
+clusterDomain: cluster.local 
+failSwapOn: false
+authentication:
+  anonymous:
+    enabled: false
+  webhook:
+    cacheTTL: 2m0s
+    enabled: true
+  x509:
+    clientCAFile: /opt/kubernetes/ssl/ca.pem 
+authorization:
+  mode: Webhook
+  webhook:
+    cacheAuthorizedTTL: 5m0s
+    cacheUnauthorizedTTL: 30s
+evictionHard:
+  imagefs.available: 15%
+  memory.available: 100Mi
+  nodefs.available: 10%
+  nodefs.inodesFree: 5%
+maxOpenFiles: 1000000
+maxPods: 110
+```
+### 2.1.3 kubelet加入集群引导kubeconfig文件
+```
+# KUBE_CONFIG="/opt/kubernetes/cfg/bootstrap.kubeconfig"
+# KUBE_APISERVER="ip:port"
+# TOKEN="与/opt/kubernetes/cfg/token.csv里保持一致 "
+# kubectl config set-cluster kubernetes \
+  --certificate-authority=/opt/kubernetes/ssl/ca.pem \
+  --embed-certs=true \
+  --server=${KUBE_APISERVER} \
+  --kubeconfig=${KUBE_CONFIG}
+# kubectl config set-credentials "kubelet-bootstrap" \
+  --token=${TOKEN} \
+  --kubeconfig=${KUBE_CONFIG}
+# kubectl config set-context default \
+  --cluster=kubernetes \
+  --user="kubelet-bootstrap" \
+  --kubeconfig=${KUBE_CONFIG}
+# kubectl config use-context default --kubeconfig=${KUBE_CONFIG}
+# cat bootstrap.kubeconfig
+apiVersion: v1
+clusters:
+- cluster:
+    certificate-authority-data: LS0t
+    server: https://192.168.176.140:6443
+  name: default-cluster
+contexts:
+- context:
+    cluster: default-cluster
+    namespace: default
+    user: default-auth
+  name: default-context
+current-context: default-context
+kind: Config
+preferences: {}
+users:
+- name: default-auth
+  user:
+    client-certificate: /opt/kubernetes/ssl/kubelet-client-current.pem
+    client-key: /opt/kubernetes/ssl/kubelet-client-current.pem
+```
+### 2.1.4 systemd管理kubelet
+```
+# vi /usr/lib/systemd/system/kubelet.service
+[Unit]
+Description=Kubernetes Kubelet
+After=docker.service
+ 
+[Service]
+EnvironmentFile=/opt/kubernetes/cfg/kubelet.conf
+ExecStart=/opt/kubernetes/bin/kubelet \$KUBELET_OPTS
+Restart=on-failure
+LimitNOFILE=65536
+ 
+[Install]
+WantedBy=multi-user.target
+# systemctl daemon-reload
+# systemctl start kubelet
+```
+### 2.1.5 允许kubelet证书申请并加入集群
+```
+# kubectl get csr
+NAME                                                   AGE   SIGNERNAME                                    REQUESTOR           CONDITION
+node-csr-_ljl7ZmiNPDjavyhJA6aMJ4bnZHp7WAml3XPEn8BzoM   28s   kubernetes.io/kube-apiserver-client-kubelet   kubelet-bootstrap   Pending
+# kubectl certificate approve node-csr-_ljl7ZmiNPDjavyhJA6aMJ4bnZHp7WAml3XPEn8BzoM
+certificatesigningrequest.certificates.k8s.io/node-csr-_ljl7ZmiNPDjavyhJA6aMJ4bnZHp7WAml3XPEn8BzoM approved
+# kubectl get csr
+NAME                                                   AGE     SIGNERNAME                                    REQUESTOR           CONDITION
+node-csr-_ljl7ZmiNPDjavyhJA6aMJ4bnZHp7WAml3XPEn8BzoM   2m31s   kubernetes.io/kube-apiserver-client-kubelet   kubelet-bootstrap   Approved,Issued
+# kubectl get nodes
+NAME          STATUS     ROLES    AGE   VERSION
+k8s-master1   NotReady   <none>   62s   v1.20.15
+```
+## 2.2 master节点部署kube-proxy
+### 2.2.1 生成kubectl证书
+```
+# cd ~/TLS/k8s
+# vi kube-proxy-csr.json
+{
+  "CN": "system:kube-proxy",
+  "hosts": [],
+  "key": {
+    "algo": "rsa",
+    "size": 2048
+  },
+  "names": [
+    {
+      "C": "CN",
+      "L": "BeiJing",
+      "ST": "BeiJing",
+      "O": "k8s",
+      "OU": "System"
+    }
+  ]
+# cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes kube-proxy-csr.json | cfssljson -bare kube-proxy
+# ls kube-proxy*
+kube-proxy.csr  kube-proxy-csr.json  kube-proxy-key.pem  kube-proxy.pem
+```
+### 2.2.2 配置kube-proxy
+```
+# vi /opt/kubernetes/cfg/kube-proxy.conf
+KUBE_PROXY_OPTS="--logtostderr=false \\
+--v=2 \\
+--log-dir=/opt/kubernetes/logs \\
+--config=/opt/kubernetes/cfg/kube-proxy-config.yml"
+```
+### 2.2.3 配置参数文件
+```
+# vi cat > /opt/kubernetes/cfg/kube-proxy-config.yml
+kind: KubeProxyConfiguration
+apiVersion: kubeproxy.config.k8s.io/v1alpha1
+bindAddress: 0.0.0.0
+metricsBindAddress: 0.0.0.0:10249
+clientConnection:
+  kubeconfig: /opt/kubernetes/cfg/kube-proxy.kubeconfig
+hostnameOverride: k8s-master1
+clusterCIDR: 10.244.0.0/16
+```
+### 2.2.4 生成kube-proxy.kubeconfig
+```
+# KUBE_CONFIG="/opt/kubernetes/cfg/kube-proxy.kubeconfig"
+# KUBE_APISERVER="ip:port"
+# kubectl config set-cluster kubernetes \
+  --certificate-authority=/opt/kubernetes/ssl/ca.pem \
+  --embed-certs=true \
+  --server=${KUBE_APISERVER} \
+  --kubeconfig=${KUBE_CONFIG}
+# kubectl config set-credentials kube-proxy \
+  --client-certificate=./kube-proxy.pem \
+  --client-key=./kube-proxy-key.pem \
+  --embed-certs=true \
+  --kubeconfig=${KUBE_CONFIG}
+# kubectl config set-context default \
+  --cluster=kubernetes \
+  --user=kube-proxy \
+  --kubeconfig=${KUBE_CONFIG}
+# kubectl config use-context default --kubeconfig=${KUBE_CONFIG}
+```
+### 2.2.5 systemd管理kube-proxy
+```
+# vi /usr/lib/systemd/system/kube-proxy.service
+[Unit]
+Description=Kubernetes Proxy
+After=network.target
+Requires=network.service
+ 
+[Service]
+EnvironmentFile=/opt/kubernetes/cfg/kube-proxy.conf
+ExecStart=/opt/kubernetes/bin/kube-proxy \$KUBE_PROXY_OPTS
+Restart=on-failure
+LimitNOFILE=65536
+ 
+[Install]
+WantedBy=multi-user.target
+# systemctl daemon-reload
+# systemctl start kube-proxy
+``` 
+## 2.3 master节点部署网络组件(Calico)
+```
+# kubectl apply -f https://docs.projectcalico.org/archive/v3.14/manifests/calico.yaml
+# kubectl get pods -n kube-system
+# kubectl get pods -n kube-system
+# kubectl get nodes
+```
+## 2.4 master节点授权apiserver访问kubelet
+```
+# vi apiserver-to-kubelet-rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  annotations:
+    rbac.authorization.kubernetes.io/autoupdate: "true"
+  labels:
+    kubernetes.io/bootstrapping: rbac-defaults
+  name: system:kube-apiserver-to-kubelet
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - nodes/proxy
+      - nodes/stats
+      - nodes/log
+      - nodes/spec
+      - nodes/metrics
+      - pods/log
+    verbs:
+      - "*"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: system:kube-apiserver
+  namespace: ""
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:kube-apiserver-to-kubelet
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: User
+    name: kubernetes
+# kubectl apply -f apiserver-to-kubelet-rbac.yaml
+```
+
+
+
 
 https://blog.csdn.net/qq_54494363/article/details/131833096
