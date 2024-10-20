@@ -275,7 +275,6 @@ ETCD_INITIAL_CLUSTER_TOKEN="etcd-cluster"
 ETCD_INITIAL_CLUSTER_STATE="new"
 
 # node1节点修改为
-
 ETCD_NAME="etcd-3"
 ETCD_DATA_DIR="/var/lib/etcd/default.etcd"
 ETCD_LISTEN_PEER_URLS="https://ip3:2380"
