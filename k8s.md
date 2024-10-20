@@ -38,16 +38,16 @@ hostnamectl set-hostname k8s-node2
 systemctl stop firewalld
 # 永久关闭
 systemctl disable firewalld
- 
+
 # 关闭selinux
-# 永久关闭
-sed -i 's/enforcing/disabled/' /etc/selinux/config  
 # 临时关闭
-setenforce 0 
- 
+setenforce 0
+# 永久关闭
+sed -i 's/enforcing/disabled/' /etc/selinux/config
+
 # 关闭swap
 # 临时关闭
-swapoff -a   
+swapoff -a
 # 永久关闭
 sed -ri 's/.*swap.*/#&/' /etc/fstab
 
@@ -59,13 +59,13 @@ ip3 k8s-node1
 EOF
 
 # 将桥接的IPV4流量传递到iptables的链
-cat > /etc/sysctl.d/k8s.conf << EOF 
-net.bridge.bridge-nf-call-ip6tables = 1 
-net.bridge.bridge-nf-call-iptables = 1 
+cat > /etc/sysctl.d/k8s.conf << EOF
+net.bridge.bridge-nf-call-ip6tables = 1
+net.bridge.bridge-nf-call-iptables = 1
 EOF
 # 生效
-sysctl --system  
- 
+sysctl --system
+
 # 时间同步
 # 使用阿里云时间服务器进行临时同步
 yum install ntpdate
@@ -95,7 +95,7 @@ wget https://download.docker.com/linux/static/stable/x86_64/docker-19.03.9.tgz /
 # 2 部署etcd集群
 etcd 是一个分布式键值对存储系统，由coreos 开发，内部采用 raft 协议作为一致性算法，用于可靠、快速地保存关键数据，并提供访问。  
 通过分布式锁、leader选举和写屏障(write barriers)，来实现可靠的分布式协作。etcd 服务作为Kubernetes集群的主数据库，在安装Kubernetes各服务之前需要首先安装和启动。  
-可以与k8s节点复用，也可以部署在k8s机器之外，只要保证apiserver能够连接到。
+可以与k8s节点复用，也可以部署在k8s机器之外，只要保证apiserver能够连接到。  
 |节点名称|IP|
 |---|---|
 |etcd-1|ip1|
