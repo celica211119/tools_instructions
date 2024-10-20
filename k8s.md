@@ -258,7 +258,7 @@ scp -rp /usr/lib/systemd/system/etcd.service ip3:/usr/lib/systemd/system/
 tree /opt/etcd/
 tree /usr/lib/systemd/system/ | grep etcd
 ```
-### 2.3.5 修改node1节点和node2节点中etcd.conf配置文件
+### 2.3.5 修改master2节点和node1节点中etcd.conf配置文件
 ```
 # master2节点修改为
 ETCD_NAME="etcd-2"
