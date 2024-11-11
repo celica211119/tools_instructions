@@ -138,7 +138,7 @@ cat > ~/TLS/etcd/ca-config.json << EOF
       "expiry": "87600h"
     },
     "profiles": {
-      "www": {
+      "kubernetes": {
          "expiry": "87600h",
          "usages": [
             "signing",
@@ -162,7 +162,7 @@ EOF
 ```
 cat > ~/TLS/etcd/ca-csr.json << EOF
 {
-    "CN": "etcd CA",
+    "CN": "kubernetes CA",
     "key": {
         "algo": "rsa",
         "size": 2048
@@ -170,8 +170,10 @@ cat > ~/TLS/etcd/ca-csr.json << EOF
     "names": [
         {
             "C": "CN",
-            "L": "shanghai",
-            "ST": "shanghai"
+            "ST": "Beijing",
+            "L": "Beijing",
+            "O": "kubernetes",
+            "OU": "CN"
         }
     ]
 }
@@ -356,18 +358,15 @@ cp kubelet kube-proxy /opt/kubernetes/bin
 ```
 # ca-config.json内容和配置etcd时一致
 cd ~/TLS/k8s
-cat > server-csr.json <<"EOF"
+cat > kube-apiserver-csr.json <<"EOF"
 {
     "CN": "kubernetes",
     "hosts": [
       "10.0.0.1",
       "127.0.0.1",
-      ip1,
-      ip2,
-      ip3,
-      ip4（扩容预留）,
-      ip5（扩容预留）,
-      ip6（扩容预留）,
+      "192.168.0.2",
+      "192.168.0.160",
+      "192.168.0.191",
       "kubernetes",
       "kubernetes.default",
       "kubernetes.default.svc",
@@ -381,18 +380,18 @@ cat > server-csr.json <<"EOF"
     "names": [
         {
             "C": "CN",
-            "L": "shanghai",
-            "ST": "shanghai",
-            "O": "k8s",
-            "OU": "System"
+            "L": "Beijing",
+            "ST": "Beijing",
+            "O": "kubernetes",
+            "OU": "CN"
         }
     ]
 }
 EOF
-cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes server-csr.json | cfssljson -bare server
+cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes kube-apiserver-csr.json | cfssljson -bare kube-apiserver
 ls
 # 结果应该如下
-ca-config.json ca.csr ca-csr.json ca-key.pem ca.pem server.csr server-csr.json server-key.pem server.pem
+ca-config.json ca.csr ca-csr.json ca-key.pem ca.pem kube-apiserver.csr kube-apiserver-csr.json kube-apiserver-key.pem kube-apiserver.pem
 ```
 ### 4.2.2 创建TLS机制所需TOKEN
 TLS Bootstraping：Master apiserver启用TLS认证后，Node节点kubelet和kube-proxy与kube-apiserver进行通信，必须使用CA签发的有效证书才可以，当Node节点很多时，这种客户端证书颁发需要大量工作，同样也会增加集群扩展复杂度。  
@@ -407,42 +406,41 @@ EOF
 ### 4.2.3 配置kube-apiserver
 ```
 cat > /etc/kubernetes/kube-apiserver.conf << "EOF"
-KUBE_APISERVER_OPTS="--logtostderr=false \\
---v=2 \\
---log-dir=/opt/kubernetes/logs \\
---etcd-servers=ip1:port,ip2:port \\
---bind-address=ip \\
---secure-port=6443 \\
---advertise-address=ip1 \\
---allow-privileged=true \\
---service-cluster-ip-range=10.0.0.0/24 \\
---enable-admission-plugins=NamespaceLifecycle,LimitRanger,ServiceAccount,ResourceQuota,NodeRestriction \\
---authorization-mode=RBAC,Node \\
---enable-bootstrap-token-auth=true \\
---token-auth-file=/opt/kubernetes/cfg/token.csv \\
---service-node-port-range=30000-32767 \\
---kubelet-client-certificate=/opt/kubernetes/ssl/server.pem \\
---kubelet-client-key=/opt/kubernetes/ssl/server-key.pem \\
---tls-cert-file=/opt/kubernetes/ssl/server.pem \\
---tls-private-key-file=/opt/kubernetes/ssl/server-key.pem \\
---client-ca-file=/opt/kubernetes/ssl/ca.pem \\
---service-account-key-file=/opt/kubernetes/ssl/ca-key.pem \\
---service-account-issuer=api \\
---service-account-signing-key-file=/opt/kubernetes/ssl/server-key.pem \\
---etcd-cafile=/opt/etcd/ssl/ca.pem \\
---etcd-certfile=/opt/etcd/ssl/server.pem \\
---etcd-keyfile=/opt/etcd/ssl/server-key.pem \\
---requestheader-client-ca-file=/opt/kubernetes/ssl/ca.pem \\
---proxy-client-cert-file=/opt/kubernetes/ssl/server.pem \\
---proxy-client-key-file=/opt/kubernetes/ssl/server-key.pem \\
---requestheader-allowed-names=kubernetes \\
---requestheader-extra-headers-prefix=X-Remote-Extra- \\
---requestheader-group-headers=X-Remote-Group \\
---requestheader-username-headers=X-Remote-User \\
---enable-aggregator-routing=true \\
---audit-log-maxage=30 \\
---audit-log-maxbackup=3 \\
---audit-log-maxsize=100 \\
+KUBE_APISERVER_OPTS="--v=4 \
+--log-dir=/opt/kubernetes/logs \
+--etcd-servers=http://192.168.0.2:2379,http://192.168.0.160:2379,http://192.168.0.191:2379 \
+--bind-address=192.168.0.2 \
+--secure-port=6443 \
+--advertise-address=192.168.0.2 \
+--allow-privileged=true \
+--service-cluster-ip-range=10.0.0.0/24 \
+--enable-admission-plugins=NamespaceLifecycle,LimitRanger,ServiceAccount,ResourceQuota,NodeRestriction \
+--authorization-mode=RBAC,Node \
+--enable-bootstrap-token-auth \
+--token-auth-file=/opt/kubernetes/cfg/token.csv \
+--service-node-port-range=30000-32767 \
+--kubelet-client-certificate=/opt/kubernetes/ssl/kube-apiserver.pem \
+--kubelet-client-key=/opt/kubernetes/ssl/kube-apiserver-key.pem \
+--tls-cert-file=/opt/kubernetes/ssl/kube-apiserver.pem \
+--tls-private-key-file=/opt/kubernetes/ssl/kube-apiserver-key.pem \
+--client-ca-file=/opt/kubernetes/ssl/ca.pem \
+--service-account-key-file=/opt/kubernetes/ssl/ca-key.pem \
+--service-account-issuer=api \
+--service-account-signing-key-file=/opt/kubernetes/ssl/kube-apiserver-key.pem \
+--etcd-cafile=/opt/etcd/ssl/ca.pem \
+--etcd-certfile=/opt/etcd/ssl/server.pem \
+--etcd-keyfile=/opt/etcd/ssl/server-key.pem \
+--requestheader-client-ca-file=/opt/kubernetes/ssl/ca.pem \
+--proxy-client-cert-file=/opt/kubernetes/ssl/kube-apiserver.pem \
+--proxy-client-key-file=/opt/kubernetes/ssl/kube-apiserver-key.pem \
+--requestheader-allowed-names=kubernetes \
+--requestheader-extra-headers-prefix=X-Remote-Extra- \
+--requestheader-group-headers=X-Remote-Group \
+--requestheader-username-headers=X-Remote-User \
+--enable-aggregator-routing=true \
+--audit-log-maxage=30 \
+--audit-log-maxbackup=3 \
+--audit-log-maxsize=100 \
 --audit-log-path=/opt/kubernetes/logs/k8s-audit.log"
 # cp ~/TLS/k8s/ca*pem ~/TLS/k8s/server*pem /opt/kubernetes/ssl/
 ```
@@ -495,8 +493,11 @@ Documentation=https://github.com/kubernetes/kubernetes
 
 [Service]
 EnvironmentFile=/opt/kubernetes/cfg/kube-apiserver.conf
-ExecStart=/opt/kubernetes/bin/kube-apiserver \$KUBE_APISERVER_OPTS
+ExecStart=/opt/kubernetes/bin/kube-apiserver $KUBE_APISERVER_OPTS
 Restart=on-failure
+RestartSec=5
+Type=notify
+LimitNOFILE=65536
 
 [Install]
 WantedBy=multi-user.target
