@@ -19,32 +19,37 @@ k8s
 |kube-scheduler|v1.29.3|负责Pod的调度，选择node节点应用部署。|
 |kube-proxy|v1.29.3|提供网络代理，负载均衡等操作。|
 ## 1.2 角色说明
-|IP|角色|安装组件|
+|ip|角色|安装组件|
 |---|---|---|
 |ip1|master1|kubectl，kube-apiserver，kube-controller-manager，kube-scheduler，kubelet，docker，etcd，cfssl|
 |ip2|master2|kubectl，kube-apiserver，kube-controller-manager，kube-scheduler，kubelet，docker，etcd，cfssl|
-|ip3|node1|kubelet，kube-proxy，Docker，cri-dockerd，etcd，cfssl|
+|ip3|worker1|kubelet，kube-proxy，Docker，cri-dockerd，etcd，cfssl|
 ## 1.3 操作系统初始化配置
 在对应节点上执行操作
 ```
 # 根据规划设置主机名
 hostnamectl set-hostname k8s-master1
 hostnamectl set-hostname k8s-master2
-hostnamectl set-hostname k8s-node2
+hostnamectl set-hostname k8s-worker1
+
+# 设置静态ip
+vi /etc/sysconfig/network-scripts/ifcfg-对应网卡名
 ```
 在所有节点都要执行操作
 ```
-# 关闭系统防火墙
-# 临时关闭
-systemctl stop firewalld
-# 永久关闭
-systemctl disable firewalld
+# 设置主机名和ip地址解析
+vi /etc/hosts
+# 在文件末尾添加以下内容
+ip1 k8s-master1
+ip2 k8s-master2
+ip3 k8s-worker1
+
+# 关闭系统防火墙并禁止开机启动
+systemctl disable --now firewalld
 
 # 关闭selinux
-# 临时关闭
-setenforce 0
-# 永久关闭
-sed -i 's/enforcing/disabled/' /etc/selinux/config
+sed -ri 's/SELINUX=enforcing/SELINUX=disabled/' /etc/selinux/config
+sestatus
 
 # 关闭swap
 # 临时关闭
@@ -52,29 +57,45 @@ swapoff -a
 # 永久关闭
 sed -ri 's/.*swap.*/#&/' /etc/fstab
 
-# 添加hosts
-cat >> /etc/hosts << EOF
-ip1 k8s-master1
-ip2 k8s-master2
-ip3 k8s-node1
-EOF
-
-# 将桥接的IPV4流量传递到iptables的链
-cat > /etc/sysctl.d/k8s.conf << EOF
-net.bridge.bridge-nf-call-ip6tables = 1
-net.bridge.bridge-nf-call-iptables = 1
-EOF
-# 生效
-sysctl --system
-
 # 时间同步
-# 使用阿里云时间服务器进行临时同步
 yum install ntpdate
+# 验证时间同步
 ntpdate ntp.aliyun.com
 ntpdate -su 192.168.0.245 //
 echo $?
 # 同步成功显示为
 0
+# 设置自动同步
+crontab -e
+* */1 * * * ntpdate -su 192.168.0.245 >> /tmp/ntpdate.log
+
+# 开启内核路由转发和网桥过滤
+vi /etc/sysctl.d/k8s.conf
+net.bridge.bridge-nf-call-ip6tables = 1
+net.bridge.bridge-nf-call-iptables = 1
+net.ipv4.ip_forward = 1
+# 加载模块并查看
+modprobe br_netfilter && lsmod | grep br_netfilter
+sysctl -p /etc/sysctl.d/k8s.conf
+
+# 添加主机ipvs管理工具及模块
+yum -y install ipvsadm ipset sysstat conntrack libseccomp
+vi /etc/sysconfig/modules/ipvs.modules
+#!/bin/bash
+modprobe -- ip_vs
+modprobe -- ip_vs_rr
+modprobe -- ip_vs_wrr
+modprobe -- ip_vs_sh
+modprobe -- nf_conntrack
+modprobe -- br_netfilter
+#添加权限并测试运行
+chmod 755 /etc/sysconfig/modules/ipvs.modules && bash /etc/sysconfig/modules/ipvs.modules && lsmod | grep -e ip_vs -e nf_conntrack
+
+# 内核升级
+
+# 设置ssh免密登录
+
+
 
 # 下载cfssl相关工具
 mkdir /software-cfssl
@@ -103,7 +124,7 @@ wget https://github.com/projectcalico/calicoctl/releases/download/v3.20.6/calico
 etcd 是一个分布式键值对存储系统，由coreos 开发，内部采用 raft 协议作为一致性算法，用于可靠、快速地保存关键数据，并提供访问。  
 通过分布式锁、leader选举和写屏障(write barriers)，来实现可靠的分布式协作。etcd 服务作为Kubernetes集群的主数据库，在安装Kubernetes各服务之前需要首先安装和启动。  
 可以与k8s节点复用，也可以部署在k8s机器之外，只要保证apiserver能够连接到。  
-|节点名称|IP|
+|节点名称|ip|
 |---|---|
 |etcd-1|ip1|
 |etcd-2|ip2|
@@ -530,7 +551,7 @@ EOF
 ```
 ```
 配置说明：
-hosts：包含所有kube-controller-manager节点 IP。
+hosts：包含所有kube-controller-manager节点 ip。
 ```
 ```
 cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes kube-controller-manager-csr.json | cfssljson -bare kube-controller-manager
