@@ -579,8 +579,8 @@ cat > kube-controller-manager-csr.json << "EOF"
   "CN": "system:kube-controller-manager",
   "hosts": [    
       "127.0.0.1",
-      "ip1",
-      "ip2",
+      "192.168.0.2",
+      "192.168.0.160",
   ],
   "key": {
     "algo": "rsa",
@@ -591,8 +591,8 @@ cat > kube-controller-manager-csr.json << "EOF"
       "C": "CN",
       "L": "BeiJing",
       "ST": "BeiJing",
-      "O": "system:masters",
-      "OU": "System"
+      "O": "system:kube-controller-manager",
+      "OU": "system"
     }
   ]
 }
@@ -611,20 +611,23 @@ ca-kube-controller-manager.csr kube-controller-manager-key.pem kube-controller-m
 ### 4.3.2 配置kube-controller-manager
 ```
 # vi /opt/kubernetes/cfg/kube-controller-manager.conf
-KUBE_CONTROLLER_MANAGER_OPTS="--logtostderr=false \\
---v=2 \\
---log-dir=/opt/kubernetes/logs \\
---leader-elect=true \\
---kubeconfig=/opt/kubernetes/cfg/kube-controller-manager.kubeconfig \\
---bind-address=127.0.0.1 \\
---allocate-node-cidrs=true \\
---cluster-cidr=10.244.0.0/16 \\
---service-cluster-ip-range=10.0.0.0/24 \\
---cluster-signing-cert-file=/opt/kubernetes/ssl/ca.pem \\
---cluster-signing-key-file=/opt/kubernetes/ssl/ca-key.pem  \\
---root-ca-file=/opt/kubernetes/ssl/ca.pem \\
---service-account-private-key-file=/opt/kubernetes/ssl/ca-key.pem \\
---cluster-signing-duration=87600h0m0s"
+KUBE_CONTROLLER_MANAGER_OPTS="--allocate-node-cidrs=true \
+--bind-address=127.0.0.1 \
+--cluster-name=kubernetes \
+--cluster-cidr=10.244.0.0/16 \
+--cluster-signing-cert-file=/opt/kubernetes/ssl/ca.pem \
+--cluster-signing-duration=87600h0m0s \
+--cluster-signing-key-file=/opt/kubernetes/ssl/ca-key.pem \
+--controllers=*,bootstrapsigner,tokencleaner \
+--feature-gates=RotateKubeletServerCertificate=true \
+--kubeconfig=/opt/kubernetes/cfg/kube-controller-manager.kubeconfig \
+--leader-elect=true \
+--root-ca-file=/opt/kubernetes/ssl/ca.pem \
+--secure-port=10257 \
+--service-account-private-key-file=/opt/kubernetes/ssl/ca-key.pem \
+--service-cluster-ip-range=10.0.0.0/24 \
+--use-service-account-credentials=true \
+--v=2
 ```
 ```
 KUBE_CONTROLLER_MANAGER_OPTS说明
@@ -647,21 +650,10 @@ KUBE_CONTROLLER_MANAGER_OPTS说明
 ```
 # KUBE_CONFIG="/opt/kubernetes/cfg/kube-controller-manager.kubeconfig"
 # KUBE_APISERVER="ip:6443"
-# kubectl config set-cluster kubernetes \
-  --certificate-authority=/opt/kubernetes/ssl/ca.pem \
-  --embed-certs=true \
-  --server=${KUBE_APISERVER} \
-  --kubeconfig=${KUBE_CONFIG}
-# kubectl config set-credentials kube-controller-manager \
-  --client-certificate=./kube-controller-manager.pem \
-  --client-key=./kube-controller-manager-key.pem \
-  --embed-certs=true \
-  --kubeconfig=${KUBE_CONFIG}
-# kubectl config set-context default \
-  --cluster=kubernetes \
-  --user=kube-controller-manager \
-  --kubeconfig=${KUBE_CONFIG}
-# kubectl config use-context default --kubeconfig=${KUBE_CONFIG}
+# kubectl config set-cluster kubernetes --certificate-authority=/opt/kubernetes/ssl/ca.pem --embed-certs=true --server=https://192.168.0.2:6443 --kubeconfig=kube-controller-manager.kubeconfig
+# kubectl config set-credentials system:kube-controller-manager --client-certificate=./kube-controller-manager.pem --client-key=./kube-controller-manager-key.pem --embed-certs=true --kubeconfig=kube-controller-manager.kubeconfig
+# kubectl config set-context system:kube-controller-manager --cluster=kubernetes --user=system:kube-controller-manager --kubeconfig=kube-controller-manager.kubeconfig
+# kubectl config use-context system:kube-controller-manager --kubeconfig=kube-controller-manager.kubeconfig
 # cat /opt/kubernetes/cfg/kube-controller-manager.kubeconfig
 apiVersion: v1
 clusters:
@@ -694,8 +686,9 @@ Requires=kube-apiserver.service
 
 [Service]
 EnvironmentFile=/opt/kubernetes/cfg/kube-controller-manager.conf
-ExecStart=/opt/kubernetes/bin/kube-controller-manager \$KUBE_CONTROLLER_MANAGER_OPTS
+ExecStart=/opt/kubernetes/bin/kube-controller-manager $KUBE_CONTROLLER_MANAGER_OPTS
 Restart=on-failure
+RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
