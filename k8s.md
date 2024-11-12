@@ -648,8 +648,6 @@ KUBE_CONTROLLER_MANAGER_OPTS说明
 ```
 ### 4.3.3 生成kube-controller-manager.kubeconfig
 ```
-# KUBE_CONFIG="/opt/kubernetes/cfg/kube-controller-manager.kubeconfig"
-# KUBE_APISERVER="ip:6443"
 # kubectl config set-cluster kubernetes --certificate-authority=/opt/kubernetes/ssl/ca.pem --embed-certs=true --server=https://192.168.0.2:6443 --kubeconfig=kube-controller-manager.kubeconfig
 # kubectl config set-credentials system:kube-controller-manager --client-certificate=./kube-controller-manager.pem --client-key=./kube-controller-manager-key.pem --embed-certs=true --kubeconfig=kube-controller-manager.kubeconfig
 # kubectl config set-context system:kube-controller-manager --cluster=kubernetes --user=system:kube-controller-manager --kubeconfig=kube-controller-manager.kubeconfig
@@ -677,7 +675,7 @@ users:
 ```
 ### 4.3.4 systemd管理kube-controller-manager
 ```
-# vi usr/lib/systemd/system/kube-controller-manager.service
+# vi /usr/lib/systemd/system/kube-controller-manager.service
 [Unit]
 Description=Kubernetes Controller Manager
 Documentation=https://github.com/kubernetes/kubernetes
@@ -712,8 +710,8 @@ WantedBy=multi-user.target
       "C": "CN",
       "L": "BeiJing",
       "ST": "BeiJing",
-      "O": "system:masters",
-      "OU": "System"
+      "O": "system:kube-scheduler",
+      "OU": "system"
     }
   ]
 }
@@ -724,32 +722,16 @@ kube-scheduler.csr  kube-scheduler-csr.json  kube-scheduler-key.pem  kube-schedu
 ### 4.4.2 配置kube-scheduler
 ```
 vi /opt/kubernetes/cfg/kube-scheduler.conf
-KUBE_SCHEDULER_OPTS="--logtostderr=false \\
---v=2 \\
---log-dir=/opt/kubernetes/logs \\
---leader-elect \\
---kubeconfig=/opt/kubernetes/cfg/kube-scheduler.kubeconfig \\
---bind-address=127.0.0.1"
+KUBE_SCHEDULER_OPTS="--kubeconfig=/opt/kubernetes/cfg/kube-scheduler.kubeconfig \
+--leader-elect=true \
+--v=2
 ```
 ### 4.4.3 生成kube-scheduler.kubeconfig
 ```
-# KUBE_CONFIG="/opt/kubernetes/cfg/kube-scheduler.kubeconfig"
-# KUBE_APISERVER="ip:port"
-# kubectl config set-cluster kubernetes \
-  --certificate-authority=/opt/kubernetes/ssl/ca.pem \
-  --embed-certs=true \
-  --server=${KUBE_APISERVER} \
-  --kubeconfig=${KUBE_CONFIG}
-# kubectl config set-credentials kube-scheduler \
-  --client-certificate=./kube-scheduler.pem \
-  --client-key=./kube-scheduler-key.pem \
-  --embed-certs=true \
-  --kubeconfig=${KUBE_CONFIG}
-# kubectl config set-context default \
-  --cluster=kubernetes \
-  --user=kube-scheduler \
-  --kubeconfig=${KUBE_CONFIG}
-# kubectl config use-context default --kubeconfig=${KUBE_CONFIG}
+# kubectl config set-cluster kubernetes --certificate-authority=/opt/kubernetes/ssl/ca.pem --embed-certs=true --server=https://192.168.0.2:6443 --kubeconfig=kube-scheduler.kubeconfig
+# kubectl config set-credentials system:kube-scheduler --client-certificate=./kube-scheduler.pem --client-key=./kube-scheduler-key.pem --embed-certs=true --kubeconfig=kube-scheduler.kubeconfig
+# kubectl config set-context system:kube-scheduler --cluster=kubernetes --user=kube-scheduler --kubeconfig=kube-scheduler.kubeconfig
+# kubectl config use-context system:kube-scheduler --kubeconfig=kube-scheduler.kubeconfig
 # cat /opt/kubernetes/cfg/kube-scheduler.kubeconfig
 apiVersion: v1
 clusters:
@@ -773,7 +755,7 @@ users:
 ```
 ### 4.4.4 systemd管理kube-scheduler
 ```
-# vi usr/lib/systemd/system/kube-scheduler.service
+# vi /usr/lib/systemd/system/kube-scheduler.service
 [Unit]
 Description=Kubernetes Scheduler
 Documentation=https://github.com/kubernetes/kubernetes
@@ -782,8 +764,9 @@ Requires=kube-apiserver.service
 
 [Service]
 EnvironmentFile=/opt/kubernetes/cfg/kube-scheduler.conf
-ExecStart=/opt/kubernetes/bin/kube-scheduler \$KUBE_CONTROLLER_MANAGER_OPTS
+ExecStart=/opt/kubernetes/bin/kube-scheduler $KUBE_SCHEDULER_OPTS
 Restart=on-failure
+RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
