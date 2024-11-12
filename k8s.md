@@ -522,6 +522,54 @@ curl --insecure https://ip2:6443/
   "code": 401
 }
 ```
+## 4.5 kubectl
+### 4.5.1 生成kubectl证书
+```
+# cd ~/TLS/k8s
+# vi admin-csr.json
+{
+  "CN": "admin",
+  "hosts": [],
+  "key": {
+    "algo": "rsa",
+    "size": 2048
+  },
+  "names": [
+    {
+      "C": "CN",
+      "L": "BeiJing",
+      "ST": "BeiJing",
+      "O": "system:masters",
+      "OU": "system"
+    }
+  ]
+}
+# cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes admin-csr.json | cfssljson -bare admin
+# ls admin*
+admin.csr  admin-csr.json  admin-key.pem  admin.pem
+```
+### 4.5.3 生成kubeconfig
+```
+# kubectl config set-cluster kubernetes --certificate-authority=/opt/kubernetes/ssl/ca.pem --embed-certs=true --server=https://192.168.0.2:6443 --kubeconfig=kube.config
+# kubectl config set-credentials admin --client-certificate=./admin.pem --client-key=./admin-key.pem --embed-certs=true --kubeconfig=kube.config
+# kubectl config set-context kubernetes --cluster=kubernetes --user=admin --kubeconfig=kube.config
+# kubectl config use-context kubernetes --kubeconfig=kube.config
+# mkdir /root/.kube
+# cp ./kube.config /root/.kube/config
+# cat /root/.kube/config
+```
+### 4.5.2 通过kubectl查看当前集群组件状态
+```
+# kubectl get nodes
+# kubectl cluster-info
+# kubectl get cs
+```
+### 4.5.4 授权kubelet-bootstrap用户允许请求证书
+```
+# kubectl create clusterrolebinding kubelet-bootstrap \
+  --clusterrole=system:node-bootstrapper \
+  --user=kubelet-bootstrap
+```
 ## 4.3 master节点部署kube-controller-manager
 ### 4.3.1 生成kube-controller-manager证书
 ```
@@ -748,64 +796,6 @@ Restart=on-failure
 WantedBy=multi-user.target
 # systemctl daemon-reload
 # systemctl start kube-scheduler
-```
-## 4.5 kubectl
-### 4.5.1 生成kubectl证书
-```
-# cd ~/TLS/k8s
-# vi admin-csr.json
-{
-  "CN": "admin",
-  "hosts": [],
-  "key": {
-    "algo": "rsa",
-    "size": 2048
-  },
-  "names": [
-    {
-      "C": "CN",
-      "L": "BeiJing",
-      "ST": "BeiJing",
-      "O": "system:masters",
-      "OU": "System"
-    }
-  ]
-}
-# cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes admin-csr.json | cfssljson -bare admin
-# ls admin*
-admin.csr  admin-csr.json  admin-key.pem  admin.pem
-```
-### 4.5.2 通过kubectl查看当前集群组件状态
-```
-# kubectl get cs
-```
-### 4.5.3 生成kubeconfig
-```
-# mkdir /root/.kube
-# KUBE_CONFIG="/root/.kube/config"
-# KUBE_APISERVER="ip:port
-# kubectl config set-cluster kubernetes \
-  --certificate-authority=/opt/kubernetes/ssl/ca.pem \
-  --embed-certs=true \
-  --server=${KUBE_APISERVER} \
-  --kubeconfig=${KUBE_CONFIG}
-# kubectl config set-credentials cluster-admin \
-  --client-certificate=./admin.pem \
-  --client-key=./admin-key.pem \
-  --embed-certs=true \
-  --kubeconfig=${KUBE_CONFIG}
-# kubectl config set-context default \
-  --cluster=kubernetes \
-  --user=cluster-admin \
-  --kubeconfig=${KUBE_CONFIG}
-# kubectl config use-context default --kubeconfig=${KUBE_CONFIG}
-# cat /root/.kube/config
-```
-### 4.5.4 授权kubelet-bootstrap用户允许请求证书
-```
-# kubectl create clusterrolebinding kubelet-bootstrap \
-  --clusterrole=system:node-bootstrapper \
-  --user=kubelet-bootstrap
 ```
 # 4 k8s部署work节点
 ## 4.1 master节点部署kubelet
