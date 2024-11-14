@@ -773,7 +773,128 @@ WantedBy=multi-user.target
 # systemctl daemon-reload
 # systemctl start kube-scheduler
 ```
+
 # 4 k8s部署work节点
+## master1
+```
+# BOOTSTRAP_TOKEN=$(awk -F "," '{print $1}' /opt/kubernetes/cfg/token.csv)
+# kubectl config set-cluster kubernetes --certificate-authority=/opt/kubernetes/ssl/ca.pem --embed-certs=true --server=https://192.168.0.2:6443 --kubeconfig=kubelet-bootstrap.kubeconfig
+# kubectl config set-credentials kubelet-bootstrap --token=${BOOTSTRAP_TOKEN} --kubeconfig=kubelet-bootstrap.kubeconfig
+# kubectl config set-context default --cluster=kubernetes --user=kubelet-bootstrap --kubeconfig=kubelet-bootstrap.kubeconfig
+# kubectl config use-context default --kubeconfig=kubelet-bootstrap.kubeconfig
+# kubectl create clusterrolebinding cluster-system-anonymous --clusterrole=cluster-admin --user=kubelet-bootstrap
+# kubectl create clusterrolebinding kubelet-bootstrap --clusterrole=system:node-bootstrapper --user=kubelet-bootstrap --kubeconfig=kubelet-bootstrap.kubeconfig
+# kubectl describe clusterrolebinding cluster-system-anonymous
+# kubectl describe clusterrolebinding kubelet-bootstrap
+# cat bootstrap.kubeconfig
+apiVersion: v1
+clusters:
+- cluster:
+    certificate-authority-data: LS0t
+    server: https://192.168.176.140:6443
+  name: default-cluster
+contexts:
+- context:
+    cluster: default-cluster
+    namespace: default
+    user: default-auth
+  name: default-context
+current-context: default-context
+kind: Config
+preferences: {}
+users:
+- name: default-auth
+  user:
+    client-certificate: /opt/kubernetes/ssl/kubelet-client-current.pem
+    client-key: /opt/kubernetes/ssl/kubelet-client-current.pem
+```
+
+## worker
+### 4.1.2 添加参数文件
+```
+# vi /opt/kubernetes/cfg/kubelet-config.json
+{
+    "kind": "KubeletConfiguration",
+    "apiVersion": "kubelet.config.k8s.io/v1beta1",
+    "authentication": {
+        "x509": {
+            "clientCAFile": "/opt/kubernetes/ssl/ca.pem"
+        },
+        "webhook": {
+            "cacheTTL": "2m0s",
+            "enabled": true
+        },
+        "anonymous": {
+            "enabled": false
+        }
+    },
+    "authorization": {
+        "mode": "Webhook",
+        "webhook": {
+            "cacheAuthorizedTTL": "5m0s",
+            "cacheUnauthorizedTTL": "30s"
+        }
+    },
+    "address": "192.168.0.191",
+    "port": 10250,
+    "readOnlyPort": 10255,
+    "cgroupDriver": "systemd",
+    "hairpinMode": "promiscuous-bridge",
+    "serializeImagePulls": false,
+    "clusterDomain": "cluster.local",
+    "clusterDNS": [
+        "10.0.0.2"
+    ]
+}
+```
+### 4.1.1 配置kubelet
+```
+# vi /opt/kubernetes/cfg/kubelet.conf
+KUBELET_OPTS="--bootstrap-kubeconfig=/opt/kubernetes/cfg/kubelet-bootstrap.kubeconfig \
+--cert-dir=/opt/kubernetes/ssl \
+--config=/opt/kubernetes/cfg/kubelet-config.json \
+--container-runtime-endpoint=unix://run/cri-dockerd.sock \
+--kubeconfig=/opt/kubernetes/cfg/kubelet.kubeconfig \
+--pod-infra-container-image=registry.k8s.com/pause:3.9 \
+--rotate-certificates \
+--v=2
+```
+```
+KUBELET_OPTS说明
+--logtostderr=false \\
+--v=2 \\
+--log-dir=/opt/kubernetes/logs \\
+--hostname-override 显示名称，集群唯一(不可重复)，设置本Node的名称
+--network-plugin 启用CNI
+--kubeconfig 空路径，会自动生成，后面用于连接 apiserver。设置与 API Server 连接的相关配置，可以与 kube-controller-manager 使用的 kubeconfig 文件相同
+--bootstrap-kubeconfig 首次启动向apiserver申请证书
+--config 配置文件参数
+--cert-dir kubelet证书目录
+--pod-infra-container-image 管理Pod网络容器的镜像 init container
+```
+### 4.1.4 systemd管理kubelet
+```
+# vi /usr/lib/systemd/system/kubelet.service
+[Unit]
+Description=Kubernetes Kubelet
+Documentation=https://github.com/kubernetes/kubernetes
+After=docker.service
+Requires=docker.service
+
+[Service]
+WorkingDirectory:/var/lib/kubelet
+EnvironmentFile=/opt/kubernetes/cfg/kubelet.conf
+ExecStart=/opt/kubernetes/bin/kubelet $KUBELET_OPTS
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+# systemctl daemon-reload
+# systemctl start kubelet
+```
+
+
 ## 4.1 master节点部署kubelet
 ### 4.1.1 配置kubelet
 ```
@@ -837,45 +958,6 @@ maxOpenFiles: 1000000
 maxPods: 110
 ```
 ### 4.1.3 kubelet加入集群引导kubeconfig文件
-```
-# KUBE_CONFIG="/opt/kubernetes/cfg/bootstrap.kubeconfig"
-# KUBE_APISERVER="ip:port"
-# TOKEN="与/opt/kubernetes/cfg/token.csv里保持一致 "
-# kubectl config set-cluster kubernetes \
-  --certificate-authority=/opt/kubernetes/ssl/ca.pem \
-  --embed-certs=true \
-  --server=${KUBE_APISERVER} \
-  --kubeconfig=${KUBE_CONFIG}
-# kubectl config set-credentials "kubelet-bootstrap" \
-  --token=${TOKEN} \
-  --kubeconfig=${KUBE_CONFIG}
-# kubectl config set-context default \
-  --cluster=kubernetes \
-  --user="kubelet-bootstrap" \
-  --kubeconfig=${KUBE_CONFIG}
-# kubectl config use-context default --kubeconfig=${KUBE_CONFIG}
-# cat bootstrap.kubeconfig
-apiVersion: v1
-clusters:
-- cluster:
-    certificate-authority-data: LS0t
-    server: https://192.168.176.140:6443
-  name: default-cluster
-contexts:
-- context:
-    cluster: default-cluster
-    namespace: default
-    user: default-auth
-  name: default-context
-current-context: default-context
-kind: Config
-preferences: {}
-users:
-- name: default-auth
-  user:
-    client-certificate: /opt/kubernetes/ssl/kubelet-client-current.pem
-    client-key: /opt/kubernetes/ssl/kubelet-client-current.pem
-```
 ### 4.1.4 systemd管理kubelet
 ```
 # vi /usr/lib/systemd/system/kubelet.service
