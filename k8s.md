@@ -11,8 +11,6 @@
 k8s
 |软件|版本|说明|
 |---|---|---|
-|etcd|v3.5.9|存储系统，用于保存集群中的相关数据。可以安装在单独的服务器上。|
-|docker|v24.0.5|容器运行环境。|
 |kubelet|v1.29.3|master派到node节点代表，管理本机容器；一个集群中每个节点上运行的代理，它保证容器都运行在Pod中， 负责维护容器的生命周期，同时也负责Volume（CSI）和网络（CNI）的管理。|
 |kube-apiserver|v1.29.3|集群控制的入口，提供HTTP REST服务，同时交给etcd存储，提供认证、授权、访问控制、API注册和发现等机制。|
 |kube-controller-manager|v1.29.3|Kubernetes集群中所有的资源对象的自动化控制中心，管理集群中藏柜后台任务，一个资源对应一个控制器。|
@@ -93,8 +91,6 @@ chmod 755 /etc/sysconfig/modules/ipvs.modules && bash /etc/sysconfig/modules/ipv
 
 # 内核升级
 
-# 设置ssh免密登录
-
 
 
 # 下载cfssl相关工具
@@ -115,8 +111,6 @@ mkdir -p ~/TLS/{etcd,k8s}
 ## 1.4 下载各个组件对应的二进制文件
 ```
 待补充
-wget https://github.com/etcd-io/etcd/releases/download/v3.4.9/etcd-v3.4.9-linux-arm64.tar.gz //待确认
-wget https://download.docker.com/linux/static/stable/x86_64/docker-19.03.9.tgz //待确认
 wget https://storage.googleapis.com/kubernetes-release/release/v1.29.3/kubernetes-server-linux-arm64.tar.gz
 wget https://github.com/projectcalico/calicoctl/releases/download/v3.20.6/calicoctl //最新，2022.08.02更新
 ```
@@ -192,154 +186,7 @@ ls
 # 结果应该如下
 ca-config.json ca.csr ca-csr.json ca-key.pem ca.pem
 ```
-## 2.3 部署etcd集群
-### 2.3.1 在master1节点部署
-```
-# 创建工作目录并复制二进制文件
-mkdir /opt/etcd/{bin,cfg,ssl} -p
-tar -xf etcd.tar.gz
-mv etcd-v3.4.9-linux-amd64/{etcd,etcdctl} /opt/etcd/bin/
-# 创建etcd配置文件
-cat > /opt/etcd/cfg/etcd.conf << EOF
-#[Member]
-ETCD_NAME="etcd-1"
-ETCD_DATA_DIR="/opt/etcd/data/default.etcd"
-ETCD_INITIAL_CLUSTER="etcd-1=http://ip1:2380,etcd-2=http://ip2:2380,etcd-3=http://ip3:2380"
-ETCD_UNSUPPORTED_ARCH=arm64
-EOF
-```
-```
-配置说明：
-ETCD_NAME：节点名称，集群中唯一。
-ETCD_DATA_DIR：数据目录。
-ETCD_INITIAL_CLUSTER：集群节点地址。
-ETCD_UNSUPPORTED_ARCH：集群架构。
-### 2.3.2 systemd管理etcd
-```
-```
-cat > /usr/lib/systemd/system/etcd.service << EOF
-[Unit]
-Description=Etcd Server
-After=network.target
-After=network-online.target
-Wants=network-online.target
 
-[Service]
-Type=notify
-EnvironmentFile=/opt/etcd/cfg/etcd.conf
-ExecStart=/opt/etcd/bin/etcd \
---listen-peer-urls http://ip1:2380 \
---listen-client-urls http://ip1:2379,http://127.0.0.1:2379 \
---initial-advertise-peer-urls http://ip1:2380 \
---advertise-client-urls http://ip1:2379 \
---initial-cluster-token etcd-cluster \
---initial-cluster-state new \
---logger=zap
-Restart=on-failure
-LimitNOFILE=65536
-
-[Install]
-WantedBy=multi-user.target
-EOF
-```
-### 2.3.3 将master1节点所有生成的文件拷贝到master2节点和node1节点
-```
-scp -rp /opt/etcd/ ip2:/opt/
-scp -rp /usr/lib/systemd/system/etcd.service ip2:/usr/lib/systemd/system/
-
-scp -rp /opt/etcd/ ip3:/opt/
-scp -rp /usr/lib/systemd/system/etcd.service ip3:/usr/lib/systemd/system/
-```
-### 2.3.4 在所有节点查看文件与服务是否存在
-```
-tree /opt/etcd/
-tree /usr/lib/systemd/system/ | grep etcd
-查看数据库目录是否有其他版本的数据
-ls /opt/etcd/data/
-rm -r /opt/etcd/data/default.etcd
-```
-### 2.3.5 修改master2节点和node1节点中etcd.conf配置文件和service
-### 2.3.6 启动etcd集群
-etcd需要多个节点同时启动，单个启动会卡住。下面每个命令在三台服务器上同时执行。
-```
-# 启动服务
-systemctl daemon-reload
-systemctl start etcd
-# 查看集群成员
-etcdctl member list -w table
-# 查看各个节点状态
-+------------------+---------+--------+-----------------+-----------------+------------+
-|        ID        | STATUS  |  NAME  |   PEER ADDRS    |  CLIENT ADDRS   | IS LEARNER |
-+------------------+---------+--------+-----------------+-----------------+------------+
-| adff72f24ac33f4b | started | etcd-1 | http://ip1:2380 | http://ip1:2379 |      false |
-| c47ea72f05f56814 | started | etcd-3 | http://ip2:2380 | http://ip2:2379 |      false |
-| d36b782983b31e67 | started | etcd-2 | http://ip3:2380 | http://ip3:2379 |      false |
-+------------------+---------+--------+-----------------+-----------------+------------+
-ETCDCTL_API=3 /opt/etcd/bin/etcdctl --endpoints="http://ip1:2379,http://ip2:2379,http://ip3:2379" endpoint health --write-out=table
-+-----------------+--------+-------------+-------+
-|     ENDPOINT    | HEALTH |    TOOK     | ERROR |
-+-----------------+--------+-------------+-------+
-| http://ip1:2379 |   true |  9.679688ms |       |
-| http://ip2:2379 |   true | 11.282224ms |       |
-| http://ip3:2379 |   true |  9.897207ms |       |
-+-----------------+--------+-------------+-------+
-# 查看集群成员状态
-etcdctl member list -w table
-```
-如果出现结果不符，使用下面命令进行错误排查
-```
-less /var/log/message
-journalctl -u etcd
-```
-# 3 部署docker
-所有节点使用相同步骤
-## 3.1 下载并解压二进制包
-```
-tar -xf docker.tgz
-mv docker/* /usr/bin/
-```
-## 3.2 配置镜像加速
-```
-mkdir -p /etc/docker
-tee /etc/docker/daemon.json <<-'EOF'
-{
-  "registry-mirrors": ["https://b9pmyelo.mirror.aliyuncs.com"]
-}
-EOF
-```
-## 3.3 docker.service配置
-```
-cat > /usr/lib/systemd/system/docker.service << EOF
-[Unit]
-Description=Docker Application Container Engine
-Documentation=https://docs.docker.com
-After=network-online.target firewalld.service
-Wants=network-online.target
- 
-[Service]
-Type=notify
-ExecStart=/usr/bin/dockerd --selinux-enabled=false --insecure-registry=127.0.0.1
-ExecReload=/bin/kill -s HUP $MAINPID
-LimitNOFILE=infinity
-LimitNPROC=infinity
-LimitCORE=infinity
-#TasksMax=infinity
-TimeoutStartSec=0
-Delegate=yes
-KillMode=process
-Restart=on-failure
-StartLimitBurst=3
-StartLimitInterval=60s
- 
-[Install]
-WantedBy=multi-user.target
-EOF
-```
-## 3.4 启动docker并设置开机启动
-```
-systemctl daemon-reload
-systemctl start docker
-```
 # 4 k8s部署master1节点
 ## 4.1 创建工作目录与安装二进制文件
 ```
