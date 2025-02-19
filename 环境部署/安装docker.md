@@ -4,7 +4,7 @@ wget https://download.docker.com/linux/static/stable/x86_64/docker-19.03.9.tgz
 tar -zxvf docker-19.03.9.tgz
 ```
 
-# 2 部署docker
+# 2 安装docker
 ## 2.1 复制二进制文件
 ```
 mv docker/* /usr/bin/
