@@ -342,20 +342,25 @@ vi /opt/kubernetes/cfg/kube-controller-manager.conf
 ```
 添加以下内容
 ```
-KUBE_CONTROLLER_MANAGER_OPTS="--logtostderr=false \
---v=2 \
---log-dir=/opt/kubernetes/logs \
---leader-elect=true \
---kubeconfig=/opt/kubernetes/cfg/kube-controller-manager.kubeconfig \
---bind-address=127.0.0.1 \
---allocate-node-cidrs=true \
---cluster-cidr=10.244.0.0/16 \
---service-cluster-ip-range=10.0.0.0/24 \
---cluster-signing-cert-file=/opt/kubernetes/ssl/ca.pem \
---cluster-signing-key-file=/opt/kubernetes/ssl/ca-key.pem  \
---root-ca-file=/opt/kubernetes/ssl/ca.pem \
---service-account-private-key-file=/opt/kubernetes/ssl/ca-key.pem \
---cluster-signing-duration=87600h0m0s"
+KUBE_CONTROLLER_MANAGER_OPTS=" \
+  --bind-address=127.0.0.1 \
+  --kubeconfig=/opt/kubernetes/cfg/kube-controller-manager.kubeconfig \
+  --service-cluster-ip-range=10.0.0.0/24 \
+  --cluster-name=kubernetes \
+  --cluster-signing-cert-file=/opt/kubernetes/ssl/ca.pem \
+  --cluster-signing-key-file=/opt/kubernetes/ssl/ca-key.pem \
+  --allocate-node-cidrs=true \
+  --cluster-cidr=10.244.0.0/16 \
+  --root-ca-file=/opt/kubernetes/ssl/ca.pem \
+  --service-account-private-key-file=/opt/kubernetes/ssl/ca-key.pem \
+  --leader-elect=true \
+  --feature-gates=RotateKubeletServerCertificate=true \
+  --controllers=*,bootstrapsigner,tokencleaner \
+  --horizontal-pod-autoscaler-sync-period=10s \
+  --tls-cert-file=/opt/kubernetes/ssl/kube-controller-manager.pem \
+  --tls-private-key-file=/opt/kubernetes/ssl/kube-controller-manager-key.pem \
+  --use-service-account-credentials=true \
+  --v=2"
 ```
 KUBE_CONTROLLER_MANAGER_OPTS说明
 ```
