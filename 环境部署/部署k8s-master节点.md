@@ -120,13 +120,13 @@ cfssl gencert -initca ca-csr.json | cfssljson -bare ca -
     "hosts": [
       "10.0.0.1",
       "127.0.0.1",
-      "10.8.94.208",
-      "10.8.94.209",
-      "10.8.94.210",
-      "10.8.94.211",
-      "10.8.94.212",
-      "10.8.94.213",
-      "10.8.94.214",
+      集群ip1,
+      集群ip2,
+      集群ip3,
+      集群ip4,
+      预留ip1,
+      预留ip2,
+      预留ip3,
       "kubernetes",
       "kubernetes.default",
       "kubernetes.default.svc",
@@ -167,9 +167,9 @@ vi /opt/kubernetes/cfg/kube-apiserver.conf
 ```
 KUBE_APISERVER_OPTS="--enable-admission-plugins=NamespaceLifecycle,NodeRestriction,LimitRanger,ServiceAccount,DefaultStorageClass,ResourceQuota \
     --anonymous-auth=false \
-    --bind-address=192.168.64.130 \
+    --bind-address=本机ip \
     --secure-port=6443 \
-    --advertise-address=192.168.64.130 \
+    --advertise-address=本机ip \
     --authorization-mode=RBAC,Node \
     --runtime-config=api/all=true \
     --enable-bootstrap-token-auth=true \
@@ -184,7 +184,7 @@ KUBE_APISERVER_OPTS="--enable-admission-plugins=NamespaceLifecycle,NodeRestricti
     --service-account-key-file=/opt/kubernetes/ssl/ca-key.pem \
     --service-account-signing-key-file=/opt/kubernetes/ssl/ca-key.pem \
     --service-account-issuer=https://kubernetes.default.svc.cluster.local \
-    --etcd-servers=https://192.168.64.130:2379,https://192.168.64.131:2379,https://192.168.64.132:2379,https://192.168.64.133:2379,https://192.168.64.134:2379 \
+    --etcd-servers=etcd服务地址1,etcd服务地址2,etcd服务地址3,etcd服务地址4 \
     --etcd-cafile=/opt/etcd/ssl/ca.pem \
     --etcd-certfile=/opt/etcd/ssl/server.pem \
     --etcd-keyfile=/opt/etcd/ssl/server-key.pem \
@@ -276,4 +276,19 @@ systemctl status kube-apiserver
 ```
 journalctl -u kube-apiserver
 ```
-
+### 2.2.6 验证kube-apiserver服务状态
+```
+curl --insecure https://ip:6443/
+```
+服务正常则会显示以下内容
+```
+{
+  "kind": "Status",
+  "apiVersion": "v1",
+  "metadata": {},
+  "status": "Failure",
+  "message": "Unauthorized",
+  "reason": "Unauthorized",
+  "code": 401
+}
+```
