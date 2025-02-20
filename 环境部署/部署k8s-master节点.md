@@ -62,7 +62,7 @@ cp kubectl /usr/bin/
       "expiry": "87600h"
     },		
     "profiles": {
-      "www": {
+      "kubernetes": {
          "expiry": "87600h",
          "usages": [
             "signing",
@@ -94,9 +94,14 @@ cp kubectl /usr/bin/
         {
             "C": "CN",
             "L": "shanghai",
-            "ST": "shanghai"
+            "ST": "shanghai",
+            "O": "kubernetes",
+            "OU": "System"
         }
-    ]
+    ],
+    "ca": {
+        "expiry": "87600h"
+    }
 }
 ```
 配置说明
@@ -108,5 +113,43 @@ cp kubectl /usr/bin/
 ```
 cfssl gencert -initca ca-csr.json | cfssljson -bare ca -
 ```
-
+创建server-csr.json
+```
+{
+    "CN": "kubernetes",
+    "hosts": [
+      "10.0.0.1",
+      "127.0.0.1",
+      "10.8.94.208",
+      "10.8.94.209",
+      "10.8.94.210",
+      "10.8.94.211",
+      "10.8.94.212",
+      "10.8.94.213",
+      "10.8.94.214",
+      "kubernetes",
+      "kubernetes.default",
+      "kubernetes.default.svc",
+      "kubernetes.default.svc.cluster",
+      "kubernetes.default.svc.cluster.local"
+    ],
+    "key": {
+        "algo": "rsa",
+        "size": 2048
+    },
+    "names": [
+        {
+            "C": "CN",
+            "L": "shanghai",
+            "ST": "shanghai",
+            "O": "k8s",
+            "OU": "System"
+        }
+    ]
+}
+```
+生成证书
+```
+cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes server-csr.json | cfssljson -bare server
+```
 
