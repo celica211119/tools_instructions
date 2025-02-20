@@ -63,12 +63,12 @@ cp kubectl /usr/bin/
     },		
     "profiles": {
       "kubernetes": {
-         "expiry": "87600h",
-         "usages": [
-            "signing",
-            "key encipherment",
-            "server auth",
-            "client auth"
+        "expiry": "87600h",
+        "usages": [
+	  "signing",
+          "key encipherment",
+	  "server auth",
+          "client auth"
         ]
       }
     }
@@ -85,23 +85,23 @@ cp kubectl /usr/bin/
 创建ca-csr.json
 ```
 {
-    "CN": "kubernetes CA",
-    "key": {
-        "algo": "rsa",
-        "size": 2048
-    },
-    "names": [
-        {
-            "C": "CN",
-            "L": "shanghai",
-            "ST": "shanghai",
-            "O": "kubernetes",
-            "OU": "System"
-        }
-    ],
-    "ca": {
-        "expiry": "87600h"
+  "CN": "kubernetes CA",
+  "key": {
+    "algo": "rsa",
+    "size": 2048
+  },
+  "names": [
+    {
+      "C": "CN",
+      "L": "shanghai",
+      "ST": "shanghai",
+      "O": "kubernetes",
+      "OU": "System"
     }
+  ],
+  "ca": {
+    "expiry": "87600h"
+  }
 }
 ```
 配置说明
@@ -116,36 +116,36 @@ cfssl gencert -initca ca-csr.json | cfssljson -bare ca -
 创建kube-apiserver-csr.json
 ```
 {
-    "CN": "kubernetes",
-    "hosts": [
-      "10.0.0.1",
-      "127.0.0.1",
-      集群ip1,
-      集群ip2,
-      集群ip3,
-      集群ip4,
-      预留ip1,
-      预留ip2,
-      预留ip3,
-      "kubernetes",
-      "kubernetes.default",
-      "kubernetes.default.svc",
-      "kubernetes.default.svc.cluster",
-      "kubernetes.default.svc.cluster.local"
-    ],
-    "key": {
-        "algo": "rsa",
-        "size": 2048
-    },
-    "names": [
-        {
-            "C": "CN",
-            "L": "shanghai",
-            "ST": "shanghai",
-            "O": "k8s",
-            "OU": "System"
-        }
-    ]
+  "CN": "kubernetes",
+  "hosts": [
+    "10.0.0.1",
+    "127.0.0.1",
+    集群ip1,
+    集群ip2,
+    集群ip3,
+    集群ip4,
+    预留ip1,
+    预留ip2,
+    预留ip3,
+    "kubernetes",
+    "kubernetes.default",
+    "kubernetes.default.svc",
+    "kubernetes.default.svc.cluster",
+    "kubernetes.default.svc.cluster.local"
+  ],
+  "key": {
+    "algo": "rsa",
+    "size": 2048
+  },
+  "names": [
+    {
+      "C": "CN",
+      "L": "shanghai",
+      "ST": "shanghai",
+      "O": "k8s",
+      "OU": "System"
+    }
+  ]
 }
 ```
 生成证书
@@ -210,7 +210,7 @@ KUBE_APISERVER_OPTS说明
 --v 日志等级
 --log-dir 日志目录
 --etcd-servers etcd集群地址
---bind-address 主机ip
+--bind-address 本机ip
 --secure-port 监听端口，默认为8080
 --advertise-address 集群通告地址
 --allow-privileged 启用授权，true为启用
@@ -291,4 +291,153 @@ curl --insecure https://ip:6443/
   "reason": "Unauthorized",
   "code": 401
 }
+```
+## 2.3 部署kube-controller-manager
+### 2.2.1 在/opt/kubernetes/ssl/目录下创建所需证书
+创建kube-controller-manager-csr.json
+```
+{
+  "CN": "system:kube-controller-manager",
+  "hosts": [ 
+    "10.0.0.1",
+    "127.0.0.1",
+    集群ip1,
+    集群ip2,
+    集群ip3,
+    集群ip4,
+    预留ip1,
+    预留ip2,
+    预留ip3,
+    "10.10.10.1",
+    "10.255.0.1",
+    "kubernetes",
+    "kubernetes.default",
+    "kubernetes.default.svc",
+    "kubernetes.default.svc.cluster",
+    "kubernetes.default.svc.cluste.local"
+  ],
+  "key": {
+    "algo": "rsa",
+    "size": 2048
+  },
+  "names": [
+    {
+      "C": "CN",
+      "L": "shanghai",
+      "ST": "shanghai",
+      "O": "system:kube-controller-manager",
+      "OU": "System"
+    }
+  ]
+}
+```
+生成证书
+```
+cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes kube-controller-manager-csr.json | cfssljson -bare kube-controller-manager
+```
+### 2.3.2 配置kube-controller-manager
+创建kube-controller-manager.conf
+```
+vi /opt/kubernetes/cfg/kube-controller-manager.conf
+```
+添加以下内容
+```
+KUBE_CONTROLLER_MANAGER_OPTS="--logtostderr=false \
+--v=2 \
+--log-dir=/opt/kubernetes/logs \
+--leader-elect=true \
+--kubeconfig=/opt/kubernetes/cfg/kube-controller-manager.kubeconfig \
+--bind-address=127.0.0.1 \
+--allocate-node-cidrs=true \
+--cluster-cidr=10.244.0.0/16 \
+--service-cluster-ip-range=10.0.0.0/24 \
+--cluster-signing-cert-file=/opt/kubernetes/ssl/ca.pem \
+--cluster-signing-key-file=/opt/kubernetes/ssl/ca-key.pem  \
+--root-ca-file=/opt/kubernetes/ssl/ca.pem \
+--service-account-private-key-file=/opt/kubernetes/ssl/ca-key.pem \
+--cluster-signing-duration=87600h0m0s"
+```
+KUBE_CONTROLLER_MANAGER_OPTS说明
+```
+--logtostderr=false \\
+--v=2 \\
+--log-dir=/opt/kubernetes/logs \\
+--leader-elect 该组件启动多个时自动选举
+--kubeconfig 设置与apiserver连接的相关设置
+--bind-address=127.0.0.1 \\
+--allocate-node-cidrs=true \\
+--cluster-cidr=10.244.0.0/16 \\
+--service-cluster-ip-range=10.0.0.0/24 \\
+--cluster-signing-cert-file 自动为kubelet颁发证书的CA
+--cluster-signing-key-file 自动为kubelet颁发证书的CA
+--root-ca-file=/opt/kubernetes/ssl/ca.pem \\
+--service-account-private-key-file=/opt/kubernetes/ssl/ca-key.pem \\
+--cluster-signing-duration=87600h0m0s
+```
+### 2.3.3 生成kubeconfig文件
+```
+KUBE_CONFIG="/opt/kubernetes/cfg/kube-controller-manager.kubeconfig"
+KUBE_APISERVER="https://本机ip:6443"
+```
+设置集群参数
+```
+kubectl config set-cluster kubernetes \
+  --certificate-authority=/opt/kubernetes/ssl/ca.pem \
+  --embed-certs=true \
+  --server=${KUBE_APISERVER} \
+  --kubeconfig=${KUBE_CONFIG}
+```
+设置客户端认证参数
+```
+kubectl config set-credentials system:kube-controller-manager \
+  --client-certificate=/opt/kubernetes/ssl/kube-controller-manager.pem \
+  --client-key=/opt/kubernetes/ssl/kube-controller-manager-key.pem \
+  --embed-certs=true \
+  --kubeconfig=${KUBE_CONFIG}
+```
+设置上下文参数
+```
+kubectl config set-context system:kube-controller-manager \
+  --cluster=kubernetes \
+  --user=system:kube-controller-manager \
+  --kubeconfig=${KUBE_CONFIG}
+```
+设置默认上下文
+```
+kubectl config use-context system:kube-controller-manager --kubeconfig=${KUBE_CONFIG}
+```
+### 2.3.4 注册kube-controller-manager服务
+创建kube-controller-manager服务
+```
+vi /usr/lib/systemd/system/kube-controller-manager.service
+```
+添加以下内容
+```
+[Unit]
+Description=Kubernetes Controller Manager
+Documentation=https://github.com/kubernetes/kubernetes
+After=kube-apiserver.service
+Requires=kube-apiserver.service
+
+[Service]
+EnvironmentFile=/opt/kubernetes/cfg/kube-controller-manager.conf
+ExecStart=/opt/kubernetes/bin/kube-controller-manager \$KUBE_CONTROLLER_MANAGER_OPTS
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+```
+重新加载服务
+```
+systemctl daemon-reload
+```
+
+### 2.3.5 启动kube-controller-manager服务并查看状态
+```
+systemctl start kube-controller-manager
+systemctl status kube-controller-manager
+```
+查看日志观察状态排查错误
+```
+journalctl -u kube-controller-manager
 ```
