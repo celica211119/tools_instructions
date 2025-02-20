@@ -101,8 +101,8 @@ cp kubectl /usr/bin/
 ```
 配置说明
 ```
-	"CN"：Common Name，从证书中提取该字段作为请求的用户名 (User Name)。浏览器使用该字段验证网站是否合法。
-	"O"：Organization，从证书中提取该字段作为请求用户所属的组 (Group)。
+"CN"：Common Name，从证书中提取该字段作为请求的用户名 (User Name)。浏览器使用该字段验证网站是否合法。
+"O"：Organization，从证书中提取该字段作为请求用户所属的组 (Group)。
 ```
 生成自签CA证书
 ```
