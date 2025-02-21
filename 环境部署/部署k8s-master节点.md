@@ -446,3 +446,131 @@ systemctl status kube-controller-manager
 ```
 journalctl -u kube-controller-manager
 ```
+## 2.4 部署kube-scheduler
+### 2.4.1 在/opt/kubernetes/ssl/目录下创建所需证书
+创建kube-scheduler-csr.json
+```
+{
+  "CN": "system:kube-scheduler",
+  "hosts": [ 
+    "10.0.0.1",
+    "127.0.0.1",
+    "10.8.94.208",
+    "10.8.94.209",
+    "10.8.94.210",
+    "10.8.94.211",
+    "10.8.94.212",
+    "10.8.94.213",
+    "10.8.94.214",
+
+    集群ip1,
+    集群ip2,
+    集群ip3,
+    集群ip4,
+    预留ip1,
+    预留ip2,
+    预留ip3,
+    "10.10.10.1",
+    "10.255.0.1",
+    "kubernetes",
+    "kubernetes.default",
+    "kubernetes.default.svc",
+    "kubernetes.default.svc.cluster",
+    "kubernetes.default.svc.cluste.local"
+  ],
+  "key": {
+    "algo": "rsa",
+    "size": 2048
+  },
+  "names": [
+    {
+      "C": "CN",
+      "L": "shanghai",
+      "ST": "shanghai",
+      "O": "system:kube-scheduler",
+      "OU": "System"
+    }
+  ]
+}
+```
+生成证书
+```
+cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes kube-scheduler-csr.json | cfssljson -bare kube-scheduler
+```
+### 2.4.2 配置kube-scheduler
+创建kube-scheduler.conf
+```
+vi /opt/kubernetes/cfg/kube-scheduler.conf
+```
+添加以下内容
+```
+KUBE_SCHEDULER_OPTS="--bind-address=127.0.0.1 \
+  --kubeconfig=/opt/kubernetes/cfg/kube-scheduler.kubeconfig \
+  --leader-elect=true \
+  --v=2"
+```
+### 2.4.3 生成kubeconfig文件
+```
+KUBE_CONFIG="/opt/kubernetes/cfg/kube-scheduler.kubeconfig"
+KUBE_APISERVER="https://本机ip:6443"
+```
+设置集群参数
+```
+kubectl config set-cluster kubernetes \
+  --certificate-authority=/opt/kubernetes/ssl/ca.pem \
+  --embed-certs=true \
+  --server=${KUBE_APISERVER} \
+  --kubeconfig=${KUBE_CONFIG}
+```
+设置客户端认证参数
+```
+kubectl config set-credentials system:kube-scheduler \
+  --client-certificate=/opt/kubernetes/ssl/kube-scheduler.pem \
+  --client-key=/opt/kubernetes/ssl/kube-scheduler-key.pem \
+  --embed-certs=true \
+  --kubeconfig=${KUBE_CONFIG}
+```
+设置上下文参数
+```
+kubectl config set-context system:kube-scheduler \
+  --cluster=kubernetes \
+  --user=system:kube-scheduler \
+  --kubeconfig=${KUBE_CONFIG}
+```
+设置默认上下文
+```
+kubectl config use-context system:kube-scheduler --kubeconfig=${KUBE_CONFIG}
+```
+### 2.4.4 注册kube-scheduler服务
+创建kube-controller-manager服务
+```
+vi /usr/lib/systemd/system/kube-scheduler.service
+```
+添加以下内容
+```
+[Unit]
+Description=Kubernetes Scheduler
+Documentation=https://github.com/kubernetes/kubernetes
+
+[Service]
+EnvironmentFile=/opt/kubernetes/cfg/kube-scheduler.conf
+ExecStart=/opt/kubernetes/bin/kube-scheduler $KUBE_SCHEDULER_OPTS
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+```
+重新加载服务
+```
+systemctl daemon-reload
+```
+
+### 2.3.5 启动kube-scheduler服务并查看状态
+```
+systemctl start kube-scheduler
+systemctl status kube-scheduler
+```
+查看日志观察状态排查错误
+```
+journalctl -u kube-controller-manager
+```
