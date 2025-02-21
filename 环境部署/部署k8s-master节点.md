@@ -455,14 +455,6 @@ journalctl -u kube-controller-manager
   "hosts": [ 
     "10.0.0.1",
     "127.0.0.1",
-    "10.8.94.208",
-    "10.8.94.209",
-    "10.8.94.210",
-    "10.8.94.211",
-    "10.8.94.212",
-    "10.8.94.213",
-    "10.8.94.214",
-
     集群ip1,
     集群ip2,
     集群ip3,
@@ -564,8 +556,7 @@ WantedBy=multi-user.target
 ```
 systemctl daemon-reload
 ```
-
-### 2.3.5 启动kube-scheduler服务并查看状态
+### 2.4.5 启动kube-scheduler服务并查看状态
 ```
 systemctl start kube-scheduler
 systemctl status kube-scheduler
@@ -573,4 +564,79 @@ systemctl status kube-scheduler
 查看日志观察状态排查错误
 ```
 journalctl -u kube-controller-manager
+```
+## 2.5 配置kubectl
+### 2.5.1 在/opt/kubernetes/ssl/目录下创建所需证书
+创建admin-csr.json
+```
+{
+  "CN": "admin",
+  "hosts": [],
+  "key": {
+    "algo": "rsa",
+    "size": 2048
+  },
+  "names": [
+    {
+      "C": "CN",
+      "L": "shanghai",
+      "ST": "shanghai",
+      "O": "system:masters",
+      "OU": "System"
+    }
+  ]
+}
+```
+生成证书
+```
+cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes admin-csr.json | cfssljson -bare admin
+```
+### 2.5.2 生成kubeconfig文件
+```
+KUBE_CONFIG="/root/.kube/config"
+KUBE_APISERVER="https://本机ip:6443"
+```
+设置集群参数
+```
+kubectl config set-cluster kubernetes \
+  --certificate-authority=/opt/kubernetes/ssl/ca.pem \
+  --embed-certs=true \
+  --server=${KUBE_APISERVER} \
+  --kubeconfig=${KUBE_CONFIG}
+```
+设置客户端认证参数
+```
+kubectl config set-credentials admin \
+  --client-certificate=/opt/kubernetes/ssl/admin.pem \
+  --client-key=/opt/kubernetes/ssl/admin-key.pem \
+  --embed-certs=true \
+  --kubeconfig=${KUBE_CONFIG}
+```
+设置上下文参数
+```
+kubectl config set-context kubernetes \
+  --cluster=kubernetes \
+  --user=admin \
+  --kubeconfig=${KUBE_CONFIG}
+```
+设置默认上下文
+```
+kubectl config use-context kubernetes --kubeconfig=${KUBE_CONFIG}
+```
+授权kubelet-bootstrap用户允许请求证书（api-service token文件中用户）
+```
+kubectl create clusterrolebinding kubelet-bootstrap \
+--clusterrole=system:node-bootstrapper \
+--user=kubelet-bootstrap
+```
+授权kubernetes证书访问kubelet api权限
+```
+kubectl create clusterrolebinding kube-apiserver:kubelet-apis --clusterrole=system:kubelet-api-admin --user kubernetes
+```
+### 2.5.3 查看集群组件状态
+```
+kubectl get cs
+kubectl cluster-info
+kubectl get componentstatuses
+kubectl get all --all-namespaces
 ```
