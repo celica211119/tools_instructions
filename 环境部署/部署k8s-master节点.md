@@ -644,7 +644,6 @@ kubectl get all --all-namespaces
 ## 3.1 复制相关文件到目标机器
 ```
 scp -r /opt/kubernetes root@扩容机器ip:/opt/
-scp /usr/local/bin/kube* root@扩容机器ip:/usr/local/bin/
 scp /usr/lib/systemd/system/kube* root@扩容机器ip:/usr/lib/systemd/system
 scp -r ~/.kube root@目标ip:~
 ```
@@ -658,7 +657,8 @@ vi /opt/kubernetes/cfg/kube-apiserver.conf
 vi ~/.kube/config
 ```
 在第5行修改为本机ip
-```apiVersion: v1
+```
+apiVersion: v1
 clusters:
 - cluster:
   certificate-authority-data:...
