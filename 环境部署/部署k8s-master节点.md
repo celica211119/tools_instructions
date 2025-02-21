@@ -640,3 +640,32 @@ kubectl cluster-info
 kubectl get componentstatuses
 kubectl get all --all-namespaces
 ```
+# 3 master节点扩容
+## 3.1 复制相关文件到目标机器
+```
+scp -r /opt/kubernetes root@扩容机器ip:/opt/
+scp /usr/local/bin/kube* root@扩容机器ip:/usr/local/bin/
+scp /usr/lib/systemd/system/kube* root@扩容机器ip:/usr/lib/systemd/system
+scp -r ~/.kube root@目标ip:~
+```
+## 3.2 在扩容机器上修改相关文件
+修改apiserver配置文件为本机IP
+```
+vi /opt/kubernetes/cfg/kube-apiserver.conf
+```
+修改连接master为本机IP
+```
+vi ~/.kube/config
+```
+在第5行修改为本机ip
+```apiVersion: v1
+clusters:
+- cluster:
+  certificate-authority-data:...
+  server: https://本机ip:6443
+```
+## 3.3 启动服务
+```
+systemctl daemon-reload
+systemctl start kube-apiserver kube-controller-manager kube-scheduler
+```
